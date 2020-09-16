@@ -24,10 +24,21 @@ lambda =.005;
 shg; clf
 display('Running seqNMF on simulated data (2 simulated sequences + noise)')
 [W,H] = seqNMF(X,'K',K, 'L', L,'lambda', lambda);
+%Xdat = S.calciumData.data - min(S.calciumData.data(:));
+
+%add a padding of zeros to each trial 
+DatTransOnlyTop.data = cat(1,DatTransOnlyTop.data,zeros(size(DatTransOnlyTop.data)));   
+Xdat = DatTransOnlyTop.dealign.data;
+Xdat = Xdat(~isnan(Xdat(:,1)),:);
+Xdat = Xdat - min(Xdat(:));
+
+[W,H] = seqNMF(Xdat','K',K, 'L', L,'lambda', lambda);
+[W,H] = seqNMF(X,'K',K, 'L', L,'lambda', lambda);
 
 %% Look at factors
 figure; SimpleWHPlot(W,H); title('SeqNMF reconstruction')
-figure; SimpleWHPlot(W,H,X); title('SeqNMF factors, with raw data')
+figure; SimpleWHPlot(W,H,Xdat'); title('SeqNMF factors, with raw data')
+
 
 %% Procedure for choosing K
 tic
@@ -61,23 +72,30 @@ display('Attempting to load MackeviciusData from seqNMF repository')
 load MackeviciusData
 display('loaded data')
 %% break data into training set and test set
+ NEURAL = Xdat';
 splitN = floor(size(NEURAL,2)*.75); 
 splitS = floor(size(SONG,2)*.75); 
 trainNEURAL = NEURAL(:,1:splitN); 
 trainSONG = SONG(:,1:splitS); 
 testNEURAL = NEURAL(:,(splitN+1):end); 
 testSONG = SONG(:,(splitS+1):end); 
+
+DatUseSeq.data = cat(1,DatUseSeq.data,zeros(size(DatUseSeq.data)));   
+trainNEURAL  = DatTransOnlyTop.indexTrials(1:2:numel(DatTransOnlyTop.alignPoints)).dealign.data';
+testNEURAL  =  DatTransOnlyTop.indexTrials(2:2:numel(DatTransOnlyTop.alignPoints)).dealign.data';
+
 %% plot one example factorization
 rng(235); % fixed rng seed for reproduceability
 X = trainNEURAL;
 K = 10;
 L = 2/3; % units of seconds
-Lneural = ceil(L*VIDEOfs);  
-Lsong = ceil(L*SONGfs);
+%Lneural = ceil(L*30);  
+Lneural = numel(DatTransOnlyTop.frameTimes);
+%Lsong = ceil(L*SONGfs);
 shg
 display('Running seqNMF on real neural data (from songbird HVC, recorded by Emily Mackevicius, Fee Lab)')
 [W, H, ~,loadings,power]= seqNMF(X,'K',K,'L',Lneural,...
-            'lambdaL1W', .1, 'lambda', .005, 'maxiter', 100, 'showPlot', 1,...
+            'lambdaL1W', .1, 'lambda', .005, 'maxiter', 50, 'showPlot', 1,...
             'lambdaOrthoW', 0); 
 p = .05; % desired p value for factors
 
@@ -90,9 +108,12 @@ H = H(is_significant,:);
 % plot, sorting neurons by latency within each factor
 [max_factor, L_sort, max_sort, hybrid] = helper.ClusterByFactor(W(:,:,:),1);
 indSort = hybrid(:,3);
-tstart = 180; % plot data starting at this timebin
+
+figure; SimpleWHPlot(W(indSort,:,:),H,X(indSort,:)); 
+
+tstart = 1; % plot data starting at this timebin
 figure; WHPlot(W(indSort,:,:),H(:,tstart:end), X(indSort,tstart:end), ...
-    0,trainSONG(:,floor(tstart*SONGfs/VIDEOfs):end))
+    1)
 title('Significant seqNMF factors, with raw data')
 figure; WHPlot(W(indSort,:,:),H(:,tstart:end), ...
     helper.reconstruct(W(indSort,:,:),H(:,tstart:end)),...
